@@ -1,33 +1,50 @@
-
-import { pgTable, text, serial, timestamp, integer } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, integer, jsonb, varchar } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-export const history = pgTable("history", {
+export const users = pgTable("users", {
   id: serial("id").primaryKey(),
-  operation: text("operation").notNull(), // e.g., "Add", "Subtract", "Difference"
-  input1: text("input1").notNull(),       // e.g., "Ad3n5"
-  input2: text("input2").notNull(),       // e.g., "50" or "Be1a1"
-  result: text("result").notNull(),       // e.g., "Ad4a1" or "1250"
+  email: varchar("email", { length: 255 }).notNull().unique(),
+  passwordHash: text("password_hash").notNull(),
   createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export const insertHistorySchema = createInsertSchema(history).omit({ 
-  id: true, 
-  createdAt: true 
+export const taxReturns = pgTable("tax_returns", {
+  id: serial("id").primaryKey(),
+  userId: integer("user_id").notNull().references(() => users.id),
+  taxYear: integer("tax_year").notNull(),
+  returnData: jsonb("return_data").notNull().default({}),
+  status: varchar("status", { length: 20 }).notNull().default("draft"),
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-export type HistoryItem = typeof history.$inferSelect;
-export type InsertHistory = z.infer<typeof insertHistorySchema>;
+export const insertUserSchema = createInsertSchema(users).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-// Request Types
-export type CreateHistoryRequest = InsertHistory;
+export const insertTaxReturnSchema = createInsertSchema(taxReturns).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
 
-// Coordinate System Configuration
-export const INV_CONFIG = {
-  RACKS: 52,    // a-z, A-Z
-  SHELVES: 20,  // a-t
-  TRAYS: 4,     // 1-4
-  BINS: 15,     // a-o
-  ITEMS: 5      // 1-5
-};
+export type User = typeof users.$inferSelect;
+export type InsertUser = z.infer<typeof insertUserSchema>;
+export type TaxReturn = typeof taxReturns.$inferSelect;
+export type InsertTaxReturn = z.infer<typeof insertTaxReturnSchema>;
+
+export const loginSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+});
+
+export const registerSchema = loginSchema.extend({
+  confirmPassword: z.string(),
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords do not match",
+  path: ["confirmPassword"],
+});
